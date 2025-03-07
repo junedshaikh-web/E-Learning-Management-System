@@ -7,10 +7,10 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    bio = db.Column(db.Text, nullable=True)
-    role = db.Column(db.String(20), nullable=False)  
-    contact = db.Column(db.String(20), nullable=True)
-    password = db.Column(db.String(255), nullable=False)
+    bio = db.Column(db.Text, nullable=True,default=None)
+    role = db.Column(db.String(20), nullable=False, default="student")  
+    contact = db.Column(db.String(20), nullable=True,default=None)
+    _password = db.Column(db.String(255), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -19,21 +19,16 @@ class User(db.Model):
     courses = db.relationship('Course', backref='instructor', lazy=True, foreign_keys='Course.instructor_id')
     enrollments = db.relationship('Enrollment', backref='student', lazy=True, foreign_keys='Enrollment.student_id')
 
-    def __init__(self, name, email, password, role, contact=None, bio=None, is_admin=False):
-        self.name = name
-        self.email = email
-        self.password = generate_password_hash(password)
-        self.role = role
-        self.contact = contact
-        self.bio = bio if role == "instructor" else None
-        self.is_admin = is_admin if role == "instructor" else False
-
-
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+    @property
+    def password(self):
+        raise AttributeError("Cannot view password in plain text")
+    
+    @password.setter
+    def password(self, password):
+        self._password = generate_password_hash(password)
 
     def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+        return check_password_hash(self._password, password)
 
         
 class Course(db.Model):

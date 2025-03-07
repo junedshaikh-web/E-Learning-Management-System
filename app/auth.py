@@ -37,13 +37,12 @@ def signup():
     new_user = User(
             name=data.get("name"),
             email=data["email"],
-            password=data["password"],
             role=data["role"],
             contact=data.get("contact"),
             bio=data.get("bio") if data["role"] == "instructor" else None,
             is_admin=(data.get("is_admin") == "True") if data["role"] == "instructor" else False
     )
-
+    new_user.password = data['password']
     db.session.add(new_user)
     db.session.commit()
     
@@ -53,13 +52,14 @@ def signup():
 @auth.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
+    password = data.get('password')
 
     if not data or "email" not in data or "password" not in data:
         return jsonify({"error": "Email and password are required"}), 400
 
     user = User.query.filter_by(email=data["email"]).first()
 
-    if not user or not check_password_hash(user.password, data["password"]):
+    if not user or not user.check_password(password):
         return jsonify({"error": "Invalid credentials"}), 401
 
     
