@@ -1,9 +1,8 @@
 from flask import Blueprint, request, jsonify
 from app import db
-from app.decorators import admin_or_instructor_owns_course_required
 from app.models import User, Enrollment, Course
 from app.schemas import UserSchema
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from werkzeug.security import generate_password_hash
 
 student_bp = Blueprint("students", __name__)
@@ -11,8 +10,17 @@ student_bp = Blueprint("students", __name__)
 student_schema = UserSchema()
 students_schema = UserSchema(many=True)
 
+def is_admin():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    return current_user and current_user.role == "admin"
+
 @student_bp.route("/", methods=["POST"])
+@jwt_required()
 def create_student():
+    if not is_admin():
+        return jsonify({"error": "Access denied. Admins only."}), 403
+    
     data = request.get_json()
 
     if User.query.filter_by(email=data["email"]).first():
@@ -35,12 +43,17 @@ def create_student():
 @student_bp.route("/", methods=["GET"])
 @jwt_required()
 def get_students():
+    if not is_admin():
+        return jsonify({"error": "Access denied. Admins only."}), 403
+    
     students = User.query.filter_by(role="student",is_active=True).all()  
     return students_schema.jsonify(students), 200
 
 @student_bp.route("/<int:id>", methods=["GET"])
 @jwt_required()
 def get_student(id):
+    if not is_admin():
+        return jsonify({"error": "Access denied. Admins only."}), 403
     student = User.query.filter_by(id=id, role="student", is_active = True).first()  
     if not student:
         return jsonify({"error": "Student not found"}), 404
@@ -68,8 +81,9 @@ def get_student(id):
 
 @student_bp.route("/<int:id>", methods=["PUT"])
 @jwt_required()
-@admin_or_instructor_owns_course_required
 def update_student(id):
+    if not is_admin():
+        return jsonify({"error": "Access denied. Admins only."}), 403
     student = User.query.filter_by(id=id, role="student",is_active=True).first()
     if not student:
         return jsonify({"error": "Student not found"}), 404
@@ -93,8 +107,9 @@ def update_student(id):
 
 @student_bp.route("/<int:id>", methods=["DELETE"])
 @jwt_required()
-@admin_or_instructor_owns_course_required
 def delete_student(id):
+    if not is_admin():
+        return jsonify({"error": "Access denied. Admins only."}), 403
     student = User.query.filter_by(id=id, role="student").first()
     if not student:
         return jsonify({"error": "Student not found"}), 404

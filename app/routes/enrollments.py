@@ -2,18 +2,30 @@ from flask import Blueprint, request, jsonify
 from app import db
 from app.models import Enrollment, User, Course
 from app.schemas import EnrollmentSchema
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity, jwt_required
 
 enrollment_bp = Blueprint("enrollments", __name__)
 
 enrollment_schema = EnrollmentSchema()
 enrollments_schema = EnrollmentSchema(many=True)
 
+def is_admin():
+    current_user_id = get_jwt_identity()
+    current_user = User.query.get(current_user_id)
+    return current_user and current_user.role == "admin"
+
+def is_course_instructor(course_id):
+    current_user_id = get_jwt_identity()
+    course = Course.query.get(course_id)
+    return course and course.instructor_id == current_user_id
 
 @enrollment_bp.route("/", methods=["POST"])
 @jwt_required()
 def enroll_student():
     data = request.get_json()
+
+    if not is_admin() and not is_course_instructor(data["course_id"]):
+        return jsonify({"error": "Access denied. Admins and course instructors only."}), 403
 
     student = User.query.filter_by(id=data["student_id"], role="student").first()
     course = Course.query.get(data["course_id"])
@@ -33,16 +45,20 @@ def enroll_student():
 @enrollment_bp.route("/progress_up", methods=["PUT"])
 @jwt_required()
 def progress():
-    data = request.get_json()
+
+    current_user_id = get_jwt_identity()
+
+    student = User.query.filter_by(id=current_user_id, role="student").first()
+    if not student:
+        return jsonify({"error": "Access denied. Only students can update their progress."}), 403
     
-    student_id = data.get("student_id")
+    data=request.get_json()
     course_id = data.get("course_id")
     completed_lessons = data.get("completed_lessons")
 
-    if not all([student_id, course_id, completed_lessons]):
+    if not all([ course_id, completed_lessons]):
         return jsonify({"error": "Missing required fields"}), 400
     
-    student = User.query.filter_by(id=student_id, role="student").first()
     course = Course.query.get(course_id)
     
     if not student:
@@ -72,15 +88,15 @@ def progress():
     }), 200
 
 
-@enrollment_bp.route("/progress/<int:id>", methods=["GET"])
+@enrollment_bp.route("/view_progress/<int:id>/<int:course_id>", methods=["GET"])
 @jwt_required()
-def update_progress(id):
-    student = User.query.filter_by(id=id, role="student").first()
+def view_progress(id,course_id):
 
-    if not student:
-        return jsonify({"error": "Student not found"}), 404
+    if not is_admin() and not is_course_instructor(course_id):
+        return jsonify({"error": "Access denied. Admins and course instructors only."}), 403
 
-    enrollments = Enrollment.query.filter_by(student_id=id).all()
+    enrollments = Enrollment.query.filter_by(student_id=id,course_id=course_id).all()
+
     if not enrollments:
         return jsonify({"message": "Student is not enrolled in any courses"}), 200
 

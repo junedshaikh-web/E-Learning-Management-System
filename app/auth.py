@@ -21,14 +21,17 @@ def validate_contact(contact):
 def signup():
     data = request.get_json()
 
-    if not data or "role" not in data or "email" not in data or "password" not in data:
+    if not data:
         return jsonify({"error": "Missing required fields"}), 400
 
-    if data["role"] not in ["student", "instructor"]:
-        return jsonify({"error": "Invalid role. Must be 'student' or 'instructor'"}), 400
+    if not data.get("email") or not data.get("password") or not data.get("confirm_password"):
+            return jsonify({"error": "Email, password, and confirm_password are required"}), 400
 
     if User.query.filter_by(email=data["email"]).first():
         return jsonify({"error": "Email already registered"}), 400
+    
+    if data["password"] != data["confirm_password"]:
+        return jsonify({"error": "Passwords do not match"}), 400
     
     contact = data.get("contact")
     if contact and not validate_contact(contact):
@@ -37,21 +40,20 @@ def signup():
     new_user = User(
             name=data.get("name"),
             email=data["email"],
-            role=data["role"],
             contact=data.get("contact"),
-            bio=data.get("bio") if data["role"] == "instructor" else None,
-            is_admin=(data.get("is_admin") == "True") if data["role"] == "instructor" else False
+            bio=data.get("bio")
     )
     new_user.password = data['password']
     db.session.add(new_user)
     db.session.commit()
     
-    return jsonify({"message": f"{data['role']} registered successfully!"}), 201
+    return jsonify({"message": f"student registered successfully!"}), 201
 
 
 @auth.route("/login", methods=["POST"])
 def login():
     data = request.get_json()
+    
     password = data.get('password')
 
     if not data or "email" not in data or "password" not in data:
@@ -62,8 +64,7 @@ def login():
     if not user or not user.check_password(password):
         return jsonify({"error": "Invalid credentials"}), 401
 
-    
-    role = "admin" if user.is_admin else user.role  
+    role =  user.role  
 
     access_token = create_access_token(identity=str(user.id), additional_claims={"role": role})
     refresh_token = create_refresh_token(identity=user.id)
